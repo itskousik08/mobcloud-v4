@@ -1,16 +1,24 @@
 {
-  "name": "mobcloud",
+  "name": "mobclowd",
   "version": "1.0.0",
-  "description": "Local AI Website Builder for Termux",
-  "main": "server.js",
+  "description": "A No-Code AI Website Builder powered by Ollama models.",
+  "main": "server/index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server/index.js"
   },
+  "keywords": [
+    "ai",
+    "website-builder",
+    "ollama",
+    "no-code",
+    "local-ai"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
   "dependencies": {
-    "body-parser": "^1.20.2",
-    "cors": "^2.8.5",
     "express": "^4.19.2",
-    "node-fetch": "^2.7.0",
-    "octokit": "^3.1.2"
+    "jszip": "^3.10.1",
+    "ollama": "^0.5.0",
+    "ws": "^8.17.0"
   }
 }
