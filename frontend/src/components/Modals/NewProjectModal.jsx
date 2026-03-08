@@ -1,21 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Folder, Check, Upload } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { api } from '../../utils/api';
 import toast from 'react-hot-toast';
 
-const TEMPLATE_ICONS = {
-  blank: '📄',
-  landing: '🚀',
-  portfolio: '👤',
-  dashboard: '📊',
-  blog: '✍️'
-};
+const TMPL_ICONS = { blank: '📄', landing: '🚀', portfolio: '👤', dashboard: '📊', blog: '✍️' };
 
 export default function NewProjectModal({ open, onClose, onCreated }) {
   const { addProject } = useAppStore();
-  const [step, setStep] = useState(1); // 1: details, 2: template
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [template, setTemplate] = useState('blank');
@@ -25,128 +18,80 @@ export default function NewProjectModal({ open, onClose, onCreated }) {
   useEffect(() => {
     if (open) {
       api.getTemplates().then(({ templates: t }) => setTemplates(t)).catch(() => {});
-      setStep(1);
-      setName('');
-      setDescription('');
-      setTemplate('blank');
+      setName(''); setDescription(''); setTemplate('blank');
     }
   }, [open]);
 
-  async function handleCreate() {
-    if (!name.trim()) { toast.error('Project name required'); return; }
+  async function create() {
+    if (!name.trim()) { toast.error('Name required'); return; }
     setCreating(true);
     try {
-      const { project, tree } = await api.createProject({ name: name.trim(), description, template });
+      const { project } = await api.createProject({ name: name.trim(), description, template });
       addProject(project);
       onCreated?.(project);
       onClose();
-      toast.success('Project created!');
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setCreating(false);
-    }
+    } catch (err) { toast.error(err.message); }
+    finally { setCreating(false); }
   }
 
-  const allTemplates = [
-    { id: 'blank', name: 'Blank Project', description: 'Start from scratch' },
-    ...templates
-  ];
+  const allTemplates = [{ id: 'blank', name: 'Blank Project', description: 'Start from scratch' }, ...templates];
 
   return (
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          />
-
-          {/* Modal */}
-          <motion.div
-            initial={{ opacity: 0, scale: .95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: .95, y: 10 }}
-            className="relative z-10 w-full max-w-lg rounded-2xl overflow-hidden"
-            style={{ background: '#0d0d1a', border: '1px solid #252540', boxShadow: '0 40px 80px rgba(0,0,0,.8)' }}
-          >
-            {/* Header */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+          <motion.div initial={{ opacity: 0, scale: 0.96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            className="relative z-10 w-full max-w-md rounded-2xl overflow-hidden"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border2)', boxShadow: '0 40px 80px rgba(0,0,0,0.7)' }}>
+            
             <div className="flex items-center justify-between px-6 py-4"
-              style={{ borderBottom: '1px solid #1a1a2e' }}>
-              <h2 className="text-lg font-bold">New Project</h2>
-              <button onClick={onClose} className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/5">
-                <X size={16} />
-              </button>
+              style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="font-bold text-base">New Project</h2>
+              <button onClick={onClose} className="btn-icon"><X size={16} /></button>
             </div>
 
-            <div className="p-6">
-              {/* Project info */}
-              <div className="space-y-4 mb-6">
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5">Project Name *</label>
-                  <input
-                    autoFocus
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="My awesome website"
-                    className="input"
-                    onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5">Description</label>
-                  <textarea
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    placeholder="What are you building?"
-                    rows={2}
-                    className="input resize-none"
-                  />
-                </div>
-              </div>
-
-              {/* Templates */}
+            <div className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-3">Start with a template</label>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text2)' }}>Project Name *</label>
+                <input autoFocus value={name} onChange={e => setName(e.target.value)}
+                  placeholder="My awesome website" className="input"
+                  onKeyDown={e => e.key === 'Enter' && create()} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text2)' }}>Description</label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)}
+                  placeholder="What are you building?" rows={2} className="input resize-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-2" style={{ color: 'var(--text2)' }}>Template</label>
                 <div className="grid grid-cols-3 gap-2">
                   {allTemplates.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => setTemplate(t.id)}
-                      className={`relative p-3 rounded-xl text-left transition-all ${
-                        template === t.id
-                          ? 'border-indigo-500/60'
-                          : 'border-white/5 hover:border-white/10'
-                      }`}
+                    <button key={t.id} onClick={() => setTemplate(t.id)}
+                      className="relative p-3 rounded-xl text-left transition-all"
                       style={{
-                        background: template === t.id ? 'rgba(99,102,241,.1)' : 'rgba(255,255,255,.03)',
-                        border: `1px solid ${template === t.id ? 'rgba(99,102,241,.4)' : '#1a1a2e'}`
-                      }}
-                    >
+                        background: template === t.id ? 'rgba(99,102,241,0.1)' : 'var(--surface2)',
+                        border: `1px solid ${template === t.id ? 'rgba(99,102,241,0.45)' : 'var(--border)'}`,
+                      }}>
                       {template === t.id && (
-                        <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
-                          <Check size={10} className="text-white" />
-                        </div>
+                        <div className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
+                          style={{ background: '#6366f1' }}><Check size={10} className="text-white" /></div>
                       )}
-                      <div className="text-xl mb-1.5">{TEMPLATE_ICONS[t.id] || '📄'}</div>
-                      <div className="text-xs font-semibold text-white">{t.name}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>
+                      <div className="text-xl mb-1">{TMPL_ICONS[t.id] || '📄'}</div>
+                      <div className="text-xs font-semibold">{t.name}</div>
+                      <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{t.description}</div>
                     </button>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-6 py-4"
-              style={{ borderTop: '1px solid #1a1a2e' }}>
+              style={{ borderTop: '1px solid var(--border)' }}>
               <button onClick={onClose} className="btn-secondary">Cancel</button>
-              <button onClick={handleCreate} disabled={creating || !name.trim()} className="btn-primary">
+              <button onClick={create} disabled={creating || !name.trim()} className="btn-primary">
                 {creating ? 'Creating...' : 'Create Project'}
               </button>
             </div>

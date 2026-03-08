@@ -6,30 +6,29 @@ import HomePage from './pages/HomePage.jsx';
 import WorkspacePage from './pages/WorkspacePage.jsx';
 
 export default function App() {
-  const { setModels, setOllamaStatus, setSelectedModel, selectedModel } = useAppStore();
+  const { setModels, setOllamaStatus, setSelectedModel, selectedModel, theme } = useAppStore();
 
   useEffect(() => {
-    // Check Ollama status on load
-    const checkOllama = async () => {
+    // Apply theme
+    if (theme === 'light') document.documentElement.classList.add('light-mode');
+    else document.documentElement.classList.remove('light-mode');
+  }, [theme]);
+
+  useEffect(() => {
+    async function check() {
       try {
         const status = await api.getOllamaStatus();
         setOllamaStatus(status.connected ? 'connected' : 'disconnected');
-
         if (status.connected) {
           const { models } = await api.getModels();
           setModels(models);
-          if (!selectedModel && models.length > 0) {
-            setSelectedModel(models[0].name);
-          }
+          if (!selectedModel && models.length > 0) setSelectedModel(models[0].name);
         }
-      } catch {
-        setOllamaStatus('disconnected');
-      }
-    };
-
-    checkOllama();
-    const interval = setInterval(checkOllama, 30000);
-    return () => clearInterval(interval);
+      } catch { setOllamaStatus('disconnected'); }
+    }
+    check();
+    const iv = setInterval(check, 30000);
+    return () => clearInterval(iv);
   }, []);
 
   return (

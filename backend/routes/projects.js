@@ -8,7 +8,10 @@ const unzipper = require('unzipper');
 const ProjectService = require('../services/projects');
 const { TEMPLATES } = require('../services/templates');
 
-const upload = multer({ dest: '/tmp/mobclowd-uploads/' });
+// Termux-safe temp dir (avoids /tmp permission issues on Android/Termux)
+const UPLOAD_TMP = path.join(__dirname, '..', 'tmp-uploads');
+fs.ensureDirSync(UPLOAD_TMP);
+const upload = multer({ dest: UPLOAD_TMP });
 
 let projectService;
 router.use((req, res, next) => {
@@ -19,13 +22,11 @@ router.use((req, res, next) => {
   next();
 });
 
-// GET all projects
 router.get('/', (req, res) => {
   const projects = req.projectService.getAll();
   res.json({ projects });
 });
 
-// GET single project
 router.get('/:id', (req, res) => {
   const project = req.projectService.getById(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -33,25 +34,19 @@ router.get('/:id', (req, res) => {
   res.json({ project, tree });
 });
 
-// POST create project
 router.post('/', async (req, res) => {
   try {
     const { name, description, template } = req.body;
     if (!name) return res.status(400).json({ error: 'Name required' });
-
     const project = req.projectService.create({ name, description, template: template || 'blank' });
     const projectDir = req.projectService.getProjectDir(project.id);
-
-    // Apply template if specified
     if (template && template !== 'blank' && TEMPLATES[template]) {
       await TEMPLATES[template].scaffold(projectDir);
     } else {
-      // Create minimal blank project
       fs.writeFileSync(path.join(projectDir, 'index.html'), getBlankHTML(name));
       fs.writeFileSync(path.join(projectDir, 'style.css'), getBlankCSS());
       fs.writeFileSync(path.join(projectDir, 'script.js'), getBlankJS());
     }
-
     const tree = req.projectService.getFileTree(project.id);
     res.json({ project, tree });
   } catch (err) {
@@ -59,41 +54,31 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT update project
 router.put('/:id', (req, res) => {
   const project = req.projectService.update(req.params.id, req.body);
   if (!project) return res.status(404).json({ error: 'Not found' });
   res.json({ project });
 });
 
-// DELETE project
 router.delete('/:id', (req, res) => {
   const ok = req.projectService.delete(req.params.id);
   if (!ok) return res.status(404).json({ error: 'Not found' });
   res.json({ success: true });
 });
 
-// GET file tree
 router.get('/:id/tree', (req, res) => {
   const tree = req.projectService.getFileTree(req.params.id);
   res.json({ tree });
 });
 
-// POST upload project ZIP
 router.post('/:id/upload', upload.single('file'), async (req, res) => {
   try {
     const projectDir = req.projectService.getProjectDir(req.params.id);
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
-
     fs.ensureDirSync(projectDir);
-
-    await fs.createReadStream(file.path)
-      .pipe(unzipper.Extract({ path: projectDir }))
-      .promise();
-
+    await fs.createReadStream(file.path).pipe(unzipper.Extract({ path: projectDir })).promise();
     fs.removeSync(file.path);
-
     const tree = req.projectService.getFileTree(req.params.id);
     res.json({ success: true, tree });
   } catch (err) {
@@ -101,23 +86,18 @@ router.post('/:id/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// GET download project as ZIP
 router.get('/:id/download', (req, res) => {
   const project = req.projectService.getById(req.params.id);
   if (!project) return res.status(404).json({ error: 'Not found' });
-
   const projectDir = req.projectService.getProjectDir(req.params.id);
   const archive = archiver('zip');
-
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${project.name}.zip"`);
-
   archive.pipe(res);
   archive.directory(projectDir, false);
   archive.finalize();
 });
 
-// GET snapshot/history
 router.get('/:id/snapshots', (req, res) => {
   const snapshotsDir = path.join(req.projectService.getProjectDir(req.params.id), '.snapshots');
   if (!fs.existsSync(snapshotsDir)) return res.json({ snapshots: [] });
@@ -128,7 +108,6 @@ router.get('/:id/snapshots', (req, res) => {
   res.json({ snapshots });
 });
 
-// POST restore snapshot
 router.post('/:id/snapshots/:snapId/restore', async (req, res) => {
   try {
     const projectDir = req.projectService.getProjectDir(req.params.id);
