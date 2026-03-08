@@ -3,60 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mobclowd - AI Website Builder</title>
+    <title>Mobclowd Pro</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- CodeMirror CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/vibrant-ink.min.css">
 </head>
 <body>
-    <div class="container">
-        <aside class="sidebar">
-            <header class="sidebar-header">
-                <h1 class="logo">Mobclowd</h1>
-                <p class="tagline">AI Website Builder</p>
-            </header>
-            <div class="controls">
-                <div class="control-group">
-                    <label for="prompt-input">Your Prompt</label>
-                    <textarea id="prompt-input" rows="4" placeholder="e.g., 'Create a modern portfolio website with hero section, projects and contact form'"></textarea>
-                </div>
-                <div class="control-group">
-                    <label for="model-select">Select AI Model</label>
-                    <select id="model-select"></select>
-                </div>
-                <button id="generate-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5.5a.75.75 0 0 0 1.5 0v-5.5Zm-1.5 7.5a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z" clip-rule="evenodd" /></svg>
-                    Generate Website
-                </button>
-                 <button id="regenerate-btn" class="secondary-btn" style="display: none;">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.204 2.102l-.724.724a.75.75 0 1 1-1.06-1.06l.94-..94a.75.75 0 0 1 1.146.317l.006.017a6.996 6.996 0 0 0 11.23-2.316.75.75 0 1 1-1.332-.632ZM4.688 8.576a5.5 5.5 0 0 1 9.204-2.102l.724-.724a.75.75 0 1 1 1.06 1.06l-.94.94a.75.75 0 0 1-1.146-.317l-.006-.017a6.996 6.996 0 0 0-11.23 2.316.75.75 0 1 1 1.332.632Z" clip-rule="evenodd" /></svg>
-                    Regenerate
-                </button>
+    <div class="main-grid">
+        <!-- LEFT SIDEBAR: FILE EXPLORER -->
+        <aside class="sidebar panel">
+            <div class="sidebar-header">
+                <h3>Project Files</h3>
             </div>
-            <div id="status-area"></div>
+            <div id="file-explorer" class="file-explorer"></div>
         </aside>
 
-        <main class="main-content">
-            <div class="preview-header">
-                <h2>Live Preview</h2>
-                <div class="preview-actions">
-                     <button id="download-btn" class="secondary-btn" disabled>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" /><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" /></svg>
-                        Download ZIP
-                    </button>
-                </div>
-            </div>
-            <div class="preview-window">
-                <iframe id="preview-frame" src="about:blank"></iframe>
-                <div id="loader" class="loader-overlay" style="display: none;">
-                    <div class="spinner"></div>
-                    <p id="loader-text">Starting generation...</p>
-                </div>
+        <!-- MIDDLE PANEL: AI CHAT -->
+        <main class="chat-panel panel">
+            <div id="chat-history" class="chat-history"></div>
+            <div class="chat-input-area">
+                <textarea id="prompt-input" placeholder="Tell the AI what to build..."></textarea>
+                <button id="send-prompt-btn">Send</button>
             </div>
         </main>
+
+        <!-- RIGHT PANEL: EDITOR & PREVIEW -->
+        <section class="editor-panel panel">
+            <div class="tab-header">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="editor">Code Editor</button>
+                    <button class="tab-btn" data-tab="preview">Live Preview</button>
+                </div>
+                <div class="preview-controls">
+                    <!-- Desktop, Tablet, Mobile Icons -->
+                </div>
+            </div>
+            <div id="editor-content" class="tab-content active">
+                <div id="editor-tabs"></div>
+                <div id="code-editor-container"></div>
+            </div>
+            <div id="preview-content" class="tab-content">
+                <iframe id="preview-frame"></iframe>
+            </div>
+        </section>
     </div>
 
-    <script src="app.js"></script>
+    <!-- CodeMirror JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/htmlmixed/htmlmixed.min.js"></script>
+    
+    <script src="app.js" type="module"></script>
 </body>
 </html>
