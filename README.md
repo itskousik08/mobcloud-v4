@@ -50,6 +50,7 @@ ollama serve
 
 # 5. Pull an AI model
 ollama pull glm-5:cloud
+ollama pull kimi-k2.5:cloud
 
 # 6. Start Mobclowd
 npm run dev
