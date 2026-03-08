@@ -1,230 +1,208 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Folder, Trash2, Zap, Code2, Globe, Cpu, ChevronRight, Upload, Star, Clock } from 'lucide-react';
+import { Plus, Folder, Trash2, ChevronRight, Clock, Sun, Moon, Cpu, Wifi, WifiOff, Zap, Code2, Globe, Layers, ArrowRight, Star } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { api } from '../utils/api';
 import toast from 'react-hot-toast';
-import OllamaStatusBar from '../components/UI/OllamaStatusBar.jsx';
 import NewProjectModal from '../components/Modals/NewProjectModal.jsx';
-import ModelSelector from '../components/UI/ModelSelector.jsx';
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { projects, setProjects, removeProject, ollamaStatus, models } = useAppStore();
+  const { projects, setProjects, removeProject, ollamaStatus, models, selectedModel, setSelectedModel, theme, toggleTheme } = useAppStore();
   const [loading, setLoading] = useState(true);
-  const [showNewProject, setShowNewProject] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    loadProjects();
+    api.getProjects()
+      .then(({ projects }) => setProjects(projects))
+      .catch(() => toast.error('Failed to load projects'))
+      .finally(() => setLoading(false));
   }, []);
 
-  async function loadProjects() {
-    try {
-      const { projects } = await api.getProjects();
-      setProjects(projects);
-    } catch (err) {
-      toast.error('Failed to load projects');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const filtered = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 
-  async function handleDeleteProject(e, id) {
+  async function deleteProject(e, id) {
     e.stopPropagation();
     if (!confirm('Delete this project?')) return;
-    try {
-      await api.deleteProject(id);
-      removeProject(id);
-      toast.success('Project deleted');
-    } catch {
-      toast.error('Failed to delete');
-    }
+    await api.deleteProject(id);
+    removeProject(id);
+    toast.success('Deleted');
   }
 
-  function openProject(project) {
-    navigate(`/workspace/${project.id}`);
-  }
-
-  const features = [
-    { icon: <Cpu size={20} />, title: 'Local AI Models', desc: 'Powered by Ollama — fully private' },
-    { icon: <Code2 size={20} />, title: 'Live Code Gen', desc: 'Watch AI write code in real time' },
-    { icon: <Globe size={20} />, title: 'Live Preview', desc: 'Instant preview with auto-refresh' },
-    { icon: <Zap size={20} />, title: 'AI Agent', desc: 'Autonomous file creation & editing' },
-  ];
+  const statusColor = { connected: '#10b981', disconnected: '#f43f5e', unknown: '#f59e0b' }[ollamaStatus];
+  const statusLabel = { connected: 'Ollama Connected', disconnected: 'Ollama Offline', unknown: 'Checking...' }[ollamaStatus];
 
   return (
-    <div className="min-h-screen animated-bg flex flex-col">
-      {/* Header */}
-      <header className="glass border-b border-white/5 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-            style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
+    <div className="app-bg min-h-screen flex flex-col overflow-auto">
+      {/* Top nav */}
+      <header className="glass sticky top-0 z-50 px-4 md:px-8 py-3 flex items-center gap-4">
+        {/* Brand */}
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-white text-sm"
+            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
             M
           </div>
-          <span className="font-bold text-white text-lg tracking-tight">Mobclowd</span>
-          <span className="text-xs px-2 py-0.5 rounded-full border border-indigo-500/30 text-indigo-400"
-            style={{ background: 'rgba(99,102,241,.1)' }}>
-            Beta
-          </span>
+          <div>
+            <span className="font-bold text-white text-base">MobCloud</span>
+            <span className="ml-1 tag tag-indigo">AI</span>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <ModelSelector />
-          <OllamaStatusBar />
+
+        <div className="flex-1" />
+
+        {/* Status */}
+        <div className="hidden md:flex items-center gap-2 text-xs px-3 py-1.5 rounded-full"
+          style={{ background: `${statusColor}15`, border: `1px solid ${statusColor}30` }}>
+          <span className="status-dot" style={{ background: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
+          <span style={{ color: statusColor }}>{statusLabel}</span>
         </div>
+
+        {/* Model picker */}
+        {models.length > 0 && (
+          <select
+            value={selectedModel}
+            onChange={e => setSelectedModel(e.target.value)}
+            className="hidden md:block text-xs px-3 py-1.5 rounded-lg border outline-none cursor-pointer"
+            style={{ background: 'var(--surface2)', borderColor: 'var(--border)', color: 'var(--text2)' }}
+          >
+            {models.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+          </select>
+        )}
+
+        {/* Theme toggle */}
+        <button onClick={toggleTheme} className="btn-icon tooltip" data-tip={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
+          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
+
+        <button onClick={() => setShowNew(true)} className="btn-primary">
+          <Plus size={15} />
+          <span className="hidden sm:inline">New Project</span>
+        </button>
       </header>
 
-      <div className="flex-1 overflow-auto">
+      <div className="max-w-6xl mx-auto w-full px-4 md:px-8 py-8 flex-1">
         {/* Hero */}
-        <div className="max-w-6xl mx-auto px-6 pt-16 pb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: .5 }}
-            className="text-center mb-12"
-          >
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-500/20 text-indigo-400 text-sm mb-6"
-              style={{ background: 'rgba(99,102,241,.08)' }}>
-              <Zap size={14} /> AI-powered local development
-            </div>
-            <h1 className="text-5xl font-extrabold tracking-tight mb-4 leading-tight">
-              Build websites with{' '}
-              <span className="gradient-text">local AI</span>
-            </h1>
-            <p className="text-gray-400 text-xl max-w-2xl mx-auto leading-relaxed">
-              A professional AI development platform powered by Ollama. Create, edit, and deploy websites — completely offline.
-            </p>
-          </motion.div>
-
-          {/* Feature pills */}
-          <div className="grid grid-cols-4 gap-4 mb-12">
-            {features.map((f, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * .1 + .2 }}
-                className="panel p-4 flex items-start gap-3"
-              >
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(99,102,241,.15)', color: '#818cf8' }}>
-                  {f.icon}
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-white">{f.title}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{f.desc}</div>
-                </div>
-              </motion.div>
-            ))}
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-5 text-sm tag tag-indigo">
+            <Zap size={13} /> Local AI · 100% Private · No Cloud
           </div>
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4 leading-[1.1]">
+            Build websites with<br />
+            <span className="gradient-text">MobCloud AI</span>
+          </h1>
+          <p className="text-base md:text-lg max-w-xl mx-auto mb-8" style={{ color: 'var(--text2)', lineHeight: 1.7 }}>
+            Your local AI development platform. Chat, generate code, preview instantly — all powered by Ollama on your device.
+          </p>
+          <button onClick={() => setShowNew(true)} className="btn-primary text-base px-6 py-3">
+            Start Building <ArrowRight size={16} />
+          </button>
+        </motion.div>
 
-          {/* Projects section */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold">Your Projects</h2>
-            <button
-              onClick={() => setShowNewProject(true)}
-              className="btn-primary"
-            >
-              <Plus size={16} /> New Project
-            </button>
-          </div>
-
-          {loading ? (
-            <div className="text-center py-16 text-gray-500">
-              <div className="typing-indicator justify-center">
-                <div className="typing-dot" />
-                <div className="typing-dot" />
-                <div className="typing-dot" />
-              </div>
-              <p className="mt-3 text-sm">Loading projects...</p>
-            </div>
-          ) : projects.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-20 panel"
-            >
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-                style={{ background: 'rgba(99,102,241,.1)' }}>
-                <Folder size={28} className="text-indigo-400" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">No projects yet</h3>
-              <p className="text-gray-500 text-sm mb-6">Create your first project to get started with AI-powered development</p>
-              <button onClick={() => setShowNewProject(true)} className="btn-primary mx-auto">
-                <Plus size={16} /> Create First Project
-              </button>
+        {/* Features row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
+          {[
+            { icon: <Cpu size={18} />, title: 'Local AI', desc: 'Runs on Ollama' },
+            { icon: <Code2 size={18} />, title: 'Live Code Gen', desc: 'Real-time writing' },
+            { icon: <Globe size={18} />, title: 'Instant Preview', desc: 'Desktop & mobile' },
+            { icon: <Layers size={18} />, title: 'File Explorer', desc: 'Full project view' },
+          ].map((f, i) => (
+            <motion.div key={i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
+              className="card p-4 flex flex-col gap-2 hover:border-indigo-500/30 transition-colors">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8' }}>{f.icon}</div>
+              <div className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{f.title}</div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>{f.desc}</div>
             </motion.div>
-          ) : (
-            <div className="grid grid-cols-3 gap-4">
-              <AnimatePresence>
-                {projects.map((project, i) => (
-                  <motion.div
-                    key={project.id}
-                    initial={{ opacity: 0, scale: .95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: .95 }}
-                    transition={{ delay: i * .05 }}
-                    onClick={() => openProject(project)}
-                    className="panel p-5 cursor-pointer group hover:border-indigo-500/40 transition-all duration-200 hover:-translate-y-1"
-                    style={{ '--hover-shadow': '0 8px 30px rgba(99,102,241,.15)' }}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                        style={{ background: 'linear-gradient(135deg, rgba(99,102,241,.2), rgba(139,92,246,.1))' }}>
-                        <Folder size={18} className="text-indigo-400" />
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => handleDeleteProject(e, project.id)}
-                          className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-400 text-gray-600 transition-colors"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                        <ChevronRight size={14} className="text-gray-600" />
-                      </div>
-                    </div>
-                    <h3 className="font-semibold text-white mb-1 truncate">{project.name}</h3>
-                    {project.description && (
-                      <p className="text-xs text-gray-500 mb-3 line-clamp-2">{project.description}</p>
-                    )}
-                    <div className="flex items-center gap-3 text-xs text-gray-600">
-                      <span className="flex items-center gap-1">
-                        <Clock size={10} />
-                        {new Date(project.updatedAt).toLocaleDateString()}
-                      </span>
-                      {project.template && project.template !== 'blank' && (
-                        <span className="px-1.5 py-0.5 rounded text-indigo-400"
-                          style={{ background: 'rgba(99,102,241,.1)' }}>
-                          {project.template}
-                        </span>
-                      )}
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
+          ))}
         </div>
+
+        {/* Projects */}
+        <div className="flex items-center gap-3 mb-5">
+          <h2 className="text-lg font-bold flex-1">Your Projects</h2>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search..."
+            className="input w-40 md:w-56 text-xs py-2"
+          />
+          <button onClick={() => setShowNew(true)} className="btn-secondary text-xs py-2">
+            <Plus size={14} /> New
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="flex gap-1.5">
+              <div className="thinking-dot" /><div className="thinking-dot" /><div className="thinking-dot" />
+            </div>
+          </div>
+        ) : filtered.length === 0 ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="card text-center py-20 flex flex-col items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+              style={{ background: 'rgba(99,102,241,0.1)' }}>
+              <Folder size={26} style={{ color: '#818cf8' }} />
+            </div>
+            <div>
+              <div className="font-semibold mb-1">{search ? 'No projects found' : 'No projects yet'}</div>
+              <div className="text-sm" style={{ color: 'var(--muted)' }}>Create your first project to get started</div>
+            </div>
+            {!search && (
+              <button onClick={() => setShowNew(true)} className="btn-primary">
+                <Plus size={15} /> Create Project
+              </button>
+            )}
+          </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <AnimatePresence>
+              {filtered.map((p, i) => (
+                <motion.div key={p.id} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }} transition={{ delay: i * 0.04 }}
+                  onClick={() => navigate(`/workspace/${p.id}`)}
+                  className="card p-5 cursor-pointer group hover:border-indigo-500/35 transition-all hover:-translate-y-1 duration-200">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.18),rgba(139,92,246,0.08))' }}>
+                      <Folder size={18} style={{ color: '#818cf8' }} />
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={(e) => deleteProject(e, p.id)}
+                        className="btn-icon text-xs hover:text-red-400" style={{ width: 28, height: 28 }}>
+                        <Trash2 size={13} />
+                      </button>
+                      <ChevronRight size={14} style={{ color: 'var(--muted)' }} />
+                    </div>
+                  </div>
+                  <div className="font-semibold text-sm mb-1 truncate">{p.name}</div>
+                  {p.description && <div className="text-xs mb-3 line-clamp-2" style={{ color: 'var(--muted)' }}>{p.description}</div>}
+                  <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
+                    <Clock size={10} />
+                    {new Date(p.updatedAt || p.createdAt).toLocaleDateString()}
+                    {p.template && p.template !== 'blank' && (
+                      <span className="tag tag-indigo ml-auto">{p.template}</span>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
 
-      {/* Ollama warning if disconnected */}
+      {/* Offline warning */}
       {ollamaStatus === 'disconnected' && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 glass-strong border border-yellow-500/20 px-5 py-3 rounded-xl flex items-center gap-3 text-sm max-w-md">
-          <span className="text-yellow-400">⚠️</span>
-          <div>
-            <span className="text-yellow-300 font-medium">Ollama not detected.</span>
-            <span className="text-gray-400 ml-1">Start Ollama to use AI features.</span>
-          </div>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 glass px-5 py-3 rounded-xl flex items-center gap-3 text-sm max-w-sm mx-4"
+          style={{ border: '1px solid rgba(245,158,11,0.3)' }}>
+          <WifiOff size={15} style={{ color: '#f59e0b' }} />
+          <span style={{ color: 'var(--text2)' }}>Ollama offline — <span style={{ color: '#fbbf24' }}>run `ollama serve`</span></span>
         </div>
       )}
 
-      <NewProjectModal
-        open={showNewProject}
-        onClose={() => setShowNewProject(false)}
-        onCreated={(project) => {
-          navigate(`/workspace/${project.id}`);
-        }}
-      />
+      <NewProjectModal open={showNew} onClose={() => setShowNew(false)}
+        onCreated={(p) => navigate(`/workspace/${p.id}`)} />
     </div>
   );
 }

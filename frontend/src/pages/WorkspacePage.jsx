@@ -1,139 +1,137 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { api } from '../utils/api';
 import { useSocket } from '../hooks/useSocket.js';
 import toast from 'react-hot-toast';
 import WorkspaceHeader from '../components/Workspace/WorkspaceHeader.jsx';
-import ActivityBar from '../components/Workspace/ActivityBar.jsx';
 import FileExplorer from '../components/FileExplorer/FileExplorer.jsx';
 import EditorPanel from '../components/Editor/EditorPanel.jsx';
 import ChatPanel from '../components/Chat/ChatPanel.jsx';
 import PreviewPanel from '../components/Preview/PreviewPanel.jsx';
-import ThinkingPanel from '../components/AI/ThinkingPanel.jsx';
-import ResizeHandle from '../components/UI/ResizeHandle.jsx';
 
 export default function WorkspacePage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-
-  const {
-    currentProject, setCurrentProject,
-    setFileTree, openFile, updateFileContent,
-    showFileExplorer, showChat, showPreview,
-    setPreviewUrl, setIsAiThinking
-  } = useAppStore();
-
+  const { setCurrentProject, setFileTree, openFile, updateFileContent, setPreviewUrl, mobilePanel, setMobilePanel } = useAppStore();
   const [loading, setLoading] = useState(true);
-  const [aiActions, setAiActions] = useState([]);
-  const [sidebarWidth, setSidebarWidth] = useState(220);
-  const [chatWidth, setChatWidth] = useState(340);
+  const [explorerWidth, setExplorerWidth] = useState(220);
+  const [chatWidth, setChatWidth] = useState(360);
+  const dragging = useRef(null);
 
-  // Load project
   useEffect(() => {
-    async function load() {
-      try {
-        const { project, tree } = await api.getProject(projectId);
+    api.getProject(projectId)
+      .then(({ project, tree }) => {
         setCurrentProject(project);
         setFileTree(tree);
         setPreviewUrl(`/preview/${projectId}/index.html`);
-      } catch (err) {
-        toast.error('Project not found');
-        navigate('/');
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+      })
+      .catch(() => { toast.error('Project not found'); navigate('/'); })
+      .finally(() => setLoading(false));
   }, [projectId]);
 
-  // Socket events
+  const refreshTree = useCallback(async () => {
+    const { tree } = await api.getProject(projectId).catch(() => ({ tree: null }));
+    if (tree) setFileTree(tree);
+  }, [projectId]);
+
   useSocket(projectId, {
     onFileChanged: async ({ path, content }) => {
       updateFileContent(path, content);
-      // Refresh file tree
-      const { tree } = await api.getProject(projectId).catch(() => ({ tree: null }));
-      if (tree) setFileTree(tree);
-      // Trigger preview refresh
+      await refreshTree();
       setPreviewUrl('');
-      setTimeout(() => setPreviewUrl(`/preview/${projectId}/index.html?t=${Date.now()}`), 100);
-    },
-    onAiAction: (data) => {
-      setAiActions(prev => [{ ...data, id: Date.now() }, ...prev].slice(0, 20));
+      setTimeout(() => setPreviewUrl(`/preview/${projectId}/index.html?t=${Date.now()}`), 150);
     }
   });
 
-  const handleFileOpen = useCallback(async (filePath) => {
+  const openFileHandler = useCallback(async (filePath) => {
     try {
       const { content, mimeType } = await api.readFile(projectId, filePath);
       openFile({ path: filePath, content, mimeType });
-    } catch {
-      toast.error('Failed to open file');
-    }
+      setMobilePanel('editor');
+    } catch { toast.error('Failed to open file'); }
   }, [projectId]);
 
-  if (loading) {
-    return (
-      <div className="h-screen animated-bg flex items-center justify-center">
-        <div className="text-center">
-          <div className="typing-indicator justify-center">
-            <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
-          </div>
-          <p className="text-gray-500 text-sm mt-3">Loading workspace...</p>
-        </div>
-      </div>
-    );
+  // Resize logic
+  function startResize(side) {
+    return (e) => {
+      dragging.current = { side, startX: e.clientX };
+      const onMove = (e) => {
+        const dx = e.clientX - dragging.current.startX;
+        dragging.current.startX = e.clientX;
+        if (dragging.current.side === 'explorer') setExplorerWidth(w => Math.max(160, Math.min(340, w + dx)));
+        if (dragging.current.side === 'chat') setChatWidth(w => Math.max(280, Math.min(500, w - dx)));
+      };
+      const onUp = () => { dragging.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor = ''; document.body.style.userSelect = ''; };
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    };
   }
 
+  if (loading) return (
+    <div className="h-screen app-bg flex items-center justify-center">
+      <div className="flex gap-1.5"><div className="thinking-dot" /><div className="thinking-dot" /><div className="thinking-dot" /></div>
+    </div>
+  );
+
+  // Mobile layout
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ background: '#020209' }}>
-      <WorkspaceHeader project={currentProject} />
+    <div className="h-screen flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
+      <WorkspaceHeader projectId={projectId} onRefreshTree={refreshTree} />
 
+      {/* Desktop layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Activity Bar */}
-        <ActivityBar />
+        {/* File explorer */}
+        <div className="hidden md:flex flex-col flex-shrink-0" style={{ width: explorerWidth }}>
+          <FileExplorer projectId={projectId} onFileOpen={openFileHandler} onRefresh={refreshTree} />
+        </div>
+        <div className="hidden md:block resize-h" onMouseDown={startResize('explorer')} />
 
-        {/* File Explorer */}
-        {showFileExplorer && (
-          <>
-            <div style={{ width: sidebarWidth, minWidth: 160, maxWidth: 400 }} className="flex-shrink-0">
-              <FileExplorer
-                projectId={projectId}
-                onFileOpen={handleFileOpen}
-              />
-            </div>
-            <ResizeHandle onResize={(dx) => setSidebarWidth(w => Math.max(160, Math.min(400, w + dx)))} />
-          </>
-        )}
-
-        {/* Editor */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Editor - center */}
+        <div className="flex-1 min-w-0 overflow-hidden">
           <EditorPanel projectId={projectId} />
         </div>
 
         {/* Preview */}
-        {showPreview && (
-          <>
-            <ResizeHandle onResize={(dx) => {}} />
-            <div className="flex-shrink-0" style={{ width: '40%', minWidth: 300 }}>
-              <PreviewPanel projectId={projectId} />
-            </div>
-          </>
-        )}
+        <div className="hidden lg:flex flex-col flex-shrink-0" style={{ width: '38%', minWidth: 280 }}>
+          <PreviewPanel projectId={projectId} />
+        </div>
 
         {/* Chat */}
-        {showChat && (
-          <>
-            <ResizeHandle onResize={(dx) => setChatWidth(w => Math.max(280, Math.min(600, w - dx)))} />
-            <div style={{ width: chatWidth, minWidth: 280 }} className="flex-shrink-0">
-              <ChatPanel projectId={projectId} />
-            </div>
-          </>
-        )}
+        <div className="hidden md:flex flex-col flex-shrink-0" style={{ width: chatWidth }}>
+          <div className="resize-h" onMouseDown={startResize('chat')} style={{ width: 3 }} />
+          <ChatPanel projectId={projectId} onRefreshTree={refreshTree} />
+        </div>
       </div>
 
-      {/* AI Thinking overlay */}
-      <ThinkingPanel />
+      {/* Mobile layout */}
+      <div className="md:hidden flex-1 overflow-hidden">
+        {mobilePanel === 'files' && <FileExplorer projectId={projectId} onFileOpen={openFileHandler} onRefresh={refreshTree} />}
+        {mobilePanel === 'editor' && <EditorPanel projectId={projectId} />}
+        {mobilePanel === 'preview' && <PreviewPanel projectId={projectId} />}
+        {mobilePanel === 'chat' && <ChatPanel projectId={projectId} onRefreshTree={refreshTree} />}
+      </div>
+
+      {/* Mobile bottom tabs */}
+      <div className="md:hidden flex border-t flex-shrink-0" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        {[
+          { id: 'chat', label: 'AI Chat', emoji: '🤖' },
+          { id: 'files', label: 'Files', emoji: '📁' },
+          { id: 'editor', label: 'Editor', emoji: '✏️' },
+          { id: 'preview', label: 'Preview', emoji: '👁️' },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setMobilePanel(tab.id)}
+            className={`flex-1 flex flex-col items-center py-2 gap-1 text-xs transition-colors ${mobilePanel === tab.id ? 'text-indigo-400' : 'text-gray-500'}`}
+            style={{ background: mobilePanel === tab.id ? 'rgba(99,102,241,0.08)' : 'transparent' }}>
+            <span className="text-base">{tab.emoji}</span>
+            <span className="text-[10px]">{tab.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
