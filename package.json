@@ -1,24 +1,22 @@
 {
   "name": "mobclowd",
   "version": "1.0.0",
-  "description": "A No-Code AI Website Builder powered by Ollama models.",
-  "main": "server/index.js",
-  "scripts": {
-    "start": "node server/index.js"
-  },
-  "keywords": [
-    "ai",
-    "website-builder",
-    "ollama",
-    "no-code",
-    "local-ai"
+  "description": "Professional AI Development Platform powered by local Ollama models",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
   ],
-  "author": "Your Name",
-  "license": "MIT",
-  "dependencies": {
-    "express": "^4.19.2",
-    "jszip": "^3.10.1",
-    "ollama": "^0.5.0",
-    "ws": "^8.17.0"
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "setup": "node scripts/setup.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }

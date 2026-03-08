@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  mobclowd:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - OLLAMA_URL=http://host.docker.internal:11434
+    volumes:
+      - mobclowd-workspace:/app/backend/workspace
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  mobclowd-workspace:
