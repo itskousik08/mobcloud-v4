@@ -100,7 +100,7 @@ async function main() {
 
   log('\n' + '═'.repeat(50), BLUE);
   log('\n✅ Setup complete!', GREEN);
-  log('\nTo start Mobclowd:', BOLD);
+  log('\nTo start MobCloud:', BOLD);
   log('  npm run dev', GREEN);
   log('\nThen open:', BOLD);
   log('  http://localhost:5173', BLUE);
@@ -111,7 +111,7 @@ async function main() {
     log('  1. Install Ollama: https://ollama.ai', BLUE);
     log('  2. Run: ollama serve', BLUE);
     log('  3. Pull a model: ollama pull llama3', BLUE);
-    log('  4. Start Mobclowd: npm run dev\n', BLUE);
+    log('  4. Start MobCloud: npm run dev\n', BLUE);
   }
 }
 

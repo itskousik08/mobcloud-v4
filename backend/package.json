@@ -1,5 +1,5 @@
 {
-  "name": "mobclowd-backend",
+  "name": "mobcloud-backend",
   "version": "4.0.0",
   "description": "MobCloud v4 Backend — Local AI Development Platform",
   "main": "server.js",
