@@ -1,363 +1,202 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Send, StopCircle, Trash2, Image, History, Sparkles,
-  Wand2, Code, Zap, X, ChevronDown, ChevronUp,
-  Database, Globe, Smartphone, Shield, Search,
-  GitBranch, Package, Layers, FileText, Bot
+  Send, StopCircle, Trash2, Sparkles, Code, Globe, Layers,
+  FileCode, ChevronRight,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../../store/useAppStore';
 import { streamAI } from '../../utils/api';
 import toast from 'react-hot-toast';
 
-// ─── Quick action categories ───────────────────
 const QUICK_CATEGORIES = [
   {
-    label: 'Build',
-    icon: <Code size={12} />,
+    label: 'Build', icon: Code,
     prompts: [
-      'Create a complete modern landing page with hero, features, pricing, and footer sections',
-      'Build a full React app with routing, components, and Tailwind CSS',
-      'Create a Next.js project with App Router, TypeScript, and Tailwind',
-      'Build a REST API with Node.js, Express, and proper folder structure',
+      'Create a stunning modern landing page with animated hero, features grid, pricing cards, and contact form',
+      'Build a full portfolio website with project gallery, skills section, testimonials, and dark theme',
+      'Create a restaurant website with menu sections, photo gallery, reservation form, and location map',
+      'Build a SaaS dashboard with sidebar nav, stats cards, data charts, and user table',
     ]
   },
   {
-    label: 'Database',
-    icon: <Database size={12} />,
+    label: 'Improve', icon: Sparkles,
     prompts: [
-      'Add Supabase integration with authentication and database schema',
-      'Set up Firebase with Firestore, Auth, and Storage configuration',
-      'Create a Prisma schema with SQLite for a blog application',
-      'Add a complete user authentication system with JWT',
+      'Make this website fully mobile-responsive with hamburger menu and proper touch targets',
+      'Add smooth CSS animations, scroll reveals, hover effects, and micro-interactions throughout',
+      'Add dark/light mode toggle that persists in localStorage with smooth CSS variable transitions',
+      'Improve the overall design: better typography, color palette, spacing, and visual hierarchy',
     ]
   },
   {
-    label: 'Improve',
-    icon: <Sparkles size={12} />,
+    label: 'Features', icon: Layers,
     prompts: [
-      'Make the entire project fully mobile-responsive with a hamburger menu',
-      'Add smooth animations, micro-interactions, and page transitions',
-      'Improve performance: lazy loading, code splitting, image optimization',
-      'Add dark mode with a toggle and persist preference in localStorage',
+      'Add a working contact form with validation, success/error states, and email-style submission',
+      'Add smooth scroll navigation, active link highlighting, and scroll progress indicator',
+      'Create a filterable gallery/portfolio with category tabs and animated filtering',
+      'Add cookie consent banner, privacy policy page, and GDPR-compliant tracking setup',
     ]
   },
   {
-    label: 'Features',
-    icon: <Layers size={12} />,
+    label: 'SEO & Export', icon: Globe,
     prompts: [
-      'Add a complete search functionality with filtering and sorting',
-      'Create a dashboard with charts, stats cards, and data tables',
-      'Add PWA support with service worker, manifest, and offline mode',
-      'Implement a complete form with validation, error states, and submission',
-    ]
-  },
-  {
-    label: 'SEO & Deploy',
-    icon: <Globe size={12} />,
-    prompts: [
-      'Add complete SEO: meta tags, Open Graph, Twitter cards, sitemap.xml',
-      'Create a Dockerfile and docker-compose.yml for deployment',
-      'Add GitHub Actions CI/CD workflow for automatic deployment',
-      'Generate a complete README with setup, usage, and API docs',
+      'Add complete SEO: meta tags, Open Graph, Twitter Cards, JSON-LD structured data, and sitemap.xml',
+      'Create robots.txt, sitemap.xml, and add all performance-critical meta tags',
+      'Optimize for Core Web Vitals: lazy loading, font optimization, image placeholders, critical CSS',
+      'Generate a comprehensive README.md with features list, setup steps, and live demo section',
     ]
   },
 ];
 
-// ─── AI Actions Feed ───────────────────────────
-function ActionsFeed({ actions }) {
-  if (!actions.length) return null;
+// ── User message bubble ─────────────────────────────
+function UserMsg({ msg }) {
   return (
-    <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--border)', background: 'var(--surface2)' }}>
-      <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--muted)' }}>AI Actions</p>
-      <div className="space-y-1 max-h-24 overflow-auto">
-        {actions.slice(0, 8).map((a, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#10b981' }} />
-            <span className="truncate" style={{ color: 'var(--text2)' }}>{a.message}</span>
-          </div>
-        ))}
+    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+      <div style={{
+        maxWidth: '85%', padding: '10px 14px', borderRadius: '14px 14px 4px 14px',
+        background: 'linear-gradient(135deg, rgba(99,102,241,0.18), rgba(139,92,246,0.12))',
+        border: '1px solid rgba(99,102,241,0.25)',
+        fontSize: 13, lineHeight: 1.6, color: 'var(--text)', whiteSpace: 'pre-wrap',
+      }}>
+        {msg.content}
       </div>
     </div>
   );
 }
 
-// ─── User Message ─────────────────────────────
-function UserMessage({ msg }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex justify-end mb-4">
-      <div className="msg-user" style={{ maxWidth: '88%' }}>
-        {msg.image && (
-          <img src={msg.image} alt="Reference" className="rounded-lg mb-2 max-h-40 object-cover w-full" />
-        )}
-        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── AI Message ───────────────────────────────
-function AIMessage({ msg, onSuggestion }) {
-  const [showSuggestions, setShowSuggestions] = useState(true);
-
-  // Strip file blocks and thinking from display
-  const display = (msg.content || '')
+// ── AI message bubble ───────────────────────────────
+function AIMsg({ msg }) {
+  const displayText = (msg.content || '')
     .replace(/<file path="[^"]*">[\s\S]*?<\/file>/g, '')
     .replace(/<thinking>[\s\S]*?<\/thinking>/g, '')
     .trim();
 
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5 mb-4">
-      {/* Avatar */}
-      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 text-white text-xs font-bold"
-        style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 2px 8px rgba(99,102,241,0.3)' }}>
-        M
-      </div>
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        {/* Avatar */}
+        <div style={{
+          width: 26, height: 26, borderRadius: 8, flexShrink: 0, marginTop: 2,
+          background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, fontWeight: 800, color: '#fff',
+        }}>AI</div>
 
-      <div className="flex-1 min-w-0">
-        {/* Main message */}
-        <div className="msg-ai">
-          {display ? (
-            <div className="prose-ai text-sm">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
-                code({ node, inline, className, children, ...props }) {
-                  const lang = /language-(\w+)/.exec(className || '')?.[1];
-                  if (!inline && lang) {
-                    return (
-                      <SyntaxHighlighter style={oneDark} language={lang} PreTag="div"
-                        customStyle={{ margin: '8px 0', borderRadius: 8, fontSize: 11.5, background: 'rgba(0,0,0,0.45)' }}
-                        {...props}>
-                        {String(children).replace(/\n$/, '')}
-                      </SyntaxHighlighter>
-                    );
-                  }
-                  return <code className={className} {...props}>{children}</code>;
-                }
-              }}>{display}</ReactMarkdown>
-            </div>
-          ) : msg.streaming ? (
-            <div className="flex gap-1.5 py-1">
-              <div className="thinking-dot" /><div className="thinking-dot" /><div className="thinking-dot" />
-            </div>
-          ) : null}
-          {msg.streaming && display && <span className="ai-cursor" />}
-        </div>
-
-        {/* Files written */}
-        {msg.filesChanged?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {msg.filesChanged.map(f => (
-              <span key={f} className="file-badge">
-                ✓ {f.split('/').pop()}
-              </span>
-            ))}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Message bubble */}
+          <div style={{
+            padding: '10px 13px', borderRadius: '4px 14px 14px 14px',
+            background: 'var(--surface2)', border: '1px solid var(--border)',
+            fontSize: 13, lineHeight: 1.6,
+          }}>
+            {!displayText && msg.streaming ? (
+              <div style={{ display: 'flex', gap: 5, padding: '2px 0' }}>
+                <div className="thinking-dot" /><div className="thinking-dot" /><div className="thinking-dot" />
+              </div>
+            ) : displayText ? (
+              <div className="prose-ai">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayText}</ReactMarkdown>
+                {msg.streaming && <span className="ai-cursor" />}
+              </div>
+            ) : null}
           </div>
-        )}
 
-        {/* AI Suggestions */}
-        {msg.suggestions?.length > 0 && !msg.streaming && (
-          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-            className="mt-3 rounded-xl overflow-hidden"
-            style={{ border: '1px solid rgba(99,102,241,0.2)', background: 'rgba(99,102,241,0.05)' }}>
-            <button
-              onClick={() => setShowSuggestions(v => !v)}
-              className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold"
-              style={{ color: '#818cf8' }}>
-              <span className="flex items-center gap-1.5">
-                <Sparkles size={12} /> Suggested next steps
-              </span>
-              {showSuggestions ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            </button>
-            <AnimatePresence>
-              {showSuggestions && (
-                <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
-                  className="overflow-hidden">
-                  <div className="px-2 pb-2 flex flex-col gap-1">
-                    {msg.suggestions.map((s, i) => (
-                      <button key={i} onClick={() => onSuggestion?.(s)}
-                        className="text-left text-xs px-3 py-2 rounded-lg transition-all"
-                        style={{ color: 'var(--text2)', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)'}
-                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
-                        → {s}
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── Quick Prompts Panel ───────────────────────
-function QuickPromptsPanel({ onSend }) {
-  const [activeCategory, setActiveCategory] = useState(0);
-
-  return (
-    <div className="flex-shrink-0 border-b" style={{ borderColor: 'var(--border)', background: 'var(--surface2)' }}>
-      {/* Category tabs */}
-      <div className="flex overflow-x-auto px-2 pt-2 gap-1 no-scrollbar">
-        {QUICK_CATEGORIES.map((cat, i) => (
-          <button key={i} onClick={() => setActiveCategory(i)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 transition-all"
-            style={activeCategory === i
-              ? { background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)' }
-              : { color: 'var(--muted)', border: '1px solid transparent' }}>
-            {cat.icon} {cat.label}
-          </button>
-        ))}
-      </div>
-      {/* Prompts */}
-      <div className="px-2 pt-1.5 pb-2 space-y-1">
-        {QUICK_CATEGORIES[activeCategory].prompts.map((p, i) => (
-          <button key={i} onClick={() => onSend(p)}
-            className="w-full text-left text-xs px-3 py-2 rounded-lg transition-all truncate"
-            style={{ color: 'var(--text2)', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = 'var(--border)'; }}>
-            {p}
-          </button>
-        ))}
+          {/* Files changed badges */}
+          {msg.filesChanged?.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+              {msg.filesChanged.map((f, i) => (
+                <span key={i} className="file-badge">
+                  <FileCode size={9} /> {f.split('/').pop()}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── Main Chat Panel ───────────────────────────
+// ── Main ChatPanel ──────────────────────────────────
 export default function ChatPanel({ projectId, onRefreshTree }) {
   const {
-    messages, addMessage, updateLastMessage, clearChat,
-    isAiThinking, setIsAiThinking,
-    selectedModel, addToHistory,
-    setAiThinkingSteps, addThinkingStep,
-    addAiAction, aiActions,
+    chatMessages, addMessage, updateLastMessage, clearMessages,
+    isAiThinking, setIsAiThinking, setAiThinkingSteps, addAiAction,
+    selectedModel, currentProject,
   } = useAppStore();
 
+  const messages = chatMessages[projectId] || [];
   const [input, setInput] = useState('');
-  const [stopFn, setStopFn] = useState(null);
-  const [imageBase64, setImageBase64] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showActions, setShowActions] = useState(false);
-  const [showQuick, setShowQuick] = useState(true);
-
+  const [abortCtrl, setAbortCtrl] = useState(null);
+  const [activeCat, setActiveCat] = useState(0);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
-  const fileInputRef = useRef(null);
 
-  const { promptHistory } = useAppStore();
-
-  // Auto scroll
+  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages.length, messages[messages.length - 1]?.content]);
 
-  // Image upload
-  function handleImagePick(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast.error('Image too large (max 10MB)'); return; }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setImageBase64(ev.target.result.split(',')[1]);
-      setImagePreview(ev.target.result);
-    };
-    reader.readAsDataURL(file);
-  }
-
-  // Send message
-  const send = useCallback(async (text) => {
-    const content = (text !== undefined ? text : input).trim();
-    if (!content || isAiThinking) return;
-    if (!selectedModel) { toast.error('Please select an AI model first'); return; }
+  const send = useCallback(async (promptOverride) => {
+    const text = (promptOverride || input).trim();
+    if (!text || isAiThinking) return;
+    if (!selectedModel) {
+      toast.error('No AI model. Run: ollama pull llama3');
+      return;
+    }
 
     setInput('');
-    setShowQuick(false);
-    addToHistory(content);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
 
-    const imgPreview = imagePreview;
-    const imgB64 = imageBase64;
-    setImageBase64(null);
-    setImagePreview(null);
-
-    // Add user message
-    addMessage({ role: 'user', content, image: imgPreview });
-    // Add AI placeholder
+    addMessage({ role: 'user', content: text });
     addMessage({ role: 'assistant', content: '', streaming: true });
-
     setIsAiThinking(true);
     setAiThinkingSteps([]);
 
-    // Build chat history
-    const history = [...messages, { role: 'user', content }]
-      .map(m => ({ role: m.role, content: m.content || '' }));
-
+    const ctrl = new AbortController();
+    setAbortCtrl(ctrl);
     let filesChanged = [];
 
-    const stop = streamAI({
+    streamAI({
       projectId,
-      messages: history,
+      messages: [{ role: 'user', content: text }],
       model: selectedModel,
-      imageBase64: imgB64,
-      onChunk: (chunk, full) => {
-        // Strip <file> and <thinking> blocks from display
-        const display = full
+      signal: ctrl.signal,
+      onFile: async ({ path: fp }) => {
+        if (!filesChanged.includes(fp)) filesChanged.push(fp);
+        addAiAction({ type: 'file', path: fp, message: `Created: ${fp}` });
+        try { await onRefreshTree?.(); } catch {}
+      },
+      onChunk: (_, full) => {
+        const clean = full
           .replace(/<file path="[^"]*">[\s\S]*?<\/file>/g, '')
           .replace(/<thinking>[\s\S]*?<\/thinking>/g, '')
           .trim();
-        updateLastMessage({ content: display, streaming: true });
+        updateLastMessage({ content: clean, streaming: true });
       },
-      onThinking: (t) => addThinkingStep(t),
-      onFile: async ({ path: fp }) => {
-        if (!filesChanged.includes(fp)) filesChanged.push(fp);
-        addAiAction({ type: 'write', path: fp, message: `Written: ${fp}` });
-        await onRefreshTree?.();
-      },
-      onAction: (a) => addAiAction(a),
-      onDone: (data) => {
-        const suggestions = [
-          'Add mobile responsive navigation with hamburger menu',
-          'Integrate Supabase for database and authentication',
-          'Add smooth page transitions and micro-animations',
-          'Create a complete dark mode system',
-          'Add SEO meta tags, sitemap.xml, and robots.txt',
-          'Set up deployment with Dockerfile and GitHub Actions',
-        ];
-        updateLastMessage({
-          streaming: false,
-          filesChanged: data?.filesChanged || filesChanged,
-          suggestions: suggestions.slice(0, 4),
-        });
+      onDone: () => {
+        updateLastMessage({ streaming: false, filesChanged });
         setIsAiThinking(false);
-        setStopFn(null);
-        setAiThinkingSteps([]);
-        onRefreshTree?.();
+        setAbortCtrl(null);
+        if (filesChanged.length > 0) {
+          toast.success(`✓ ${filesChanged.length} file${filesChanged.length > 1 ? 's' : ''} created`);
+          onRefreshTree?.();
+        }
       },
       onError: (err) => {
-        updateLastMessage({
-          content: `⚠️ Error: ${err?.message || 'Something went wrong. Check Ollama is running.'}`,
-          streaming: false,
-        });
+        updateLastMessage({ content: `⚠️ ${err.message}`, streaming: false });
         setIsAiThinking(false);
-        setStopFn(null);
-        toast.error(err?.message || 'AI error');
-      }
+        setAbortCtrl(null);
+        toast.error(err.message);
+      },
     });
+  }, [input, isAiThinking, selectedModel, projectId]);
 
-    setStopFn(() => stop);
-  }, [input, messages, selectedModel, isAiThinking, projectId, imageBase64, imagePreview]);
-
-  function stopGeneration() {
-    stopFn?.();
-    setStopFn(null);
+  function stop() {
+    abortCtrl?.abort();
+    setAbortCtrl(null);
     updateLastMessage({ streaming: false });
     setIsAiThinking(false);
   }
@@ -369,176 +208,161 @@ export default function ChatPanel({ projectId, onRefreshTree }) {
     }
   }
 
-  return (
-    <div className="h-full flex flex-col overflow-hidden"
-      style={{ background: 'var(--surface)', borderLeft: '1px solid var(--border)' }}>
+  const showQuick = messages.length === 0;
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-4 py-2.5 flex-shrink-0"
-        style={{ borderBottom: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold text-white"
-            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>AI</div>
-          <span className="font-semibold text-sm">MobCloud AI</span>
-          {isAiThinking && (
-            <span className="tag tag-indigo text-xs animate-pulse">Building...</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setShowActions(v => !v)} className="btn-icon" title="AI Actions"
-            style={{ position: 'relative' }}>
-            <GitBranch size={14} />
-            {aiActions.length > 0 && (
-              <span className="notif-badge" />
-            )}
+  return (
+    <div style={{
+      height: '100%', display: 'flex', flexDirection: 'column',
+      overflow: 'hidden', background: 'var(--surface)', borderLeft: '1px solid var(--border)',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+        borderBottom: '1px solid var(--border)', flexShrink: 0,
+      }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: 8,
+          background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, fontWeight: 800, color: '#fff',
+        }}>AI</div>
+        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>AI Assistant</span>
+        {selectedModel && (
+          <span className="tag tag-indigo" style={{ fontSize: 10 }}>
+            {selectedModel.split(':')[0]}
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        {messages.length > 0 && (
+          <button onClick={() => clearMessages(projectId)} className="btn-icon" style={{ width: 26, height: 26 }} title="Clear chat">
+            <Trash2 size={12} />
           </button>
-          <button onClick={() => setShowHistory(v => !v)} className="btn-icon" title="Prompt history">
-            <History size={14} />
-          </button>
-          <button onClick={clearChat} className="btn-icon" title="Clear chat">
-            <Trash2 size={14} />
-          </button>
-        </div>
+        )}
       </div>
 
-      {/* ── Actions Feed ── */}
-      <AnimatePresence>
-        {showActions && aiActions.length > 0 && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <ActionsFeed actions={aiActions} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
+        {showQuick ? (
+          <div>
+            {/* Welcome */}
+            <div style={{ textAlign: 'center', marginBottom: 20, paddingTop: 8 }}>
+              <div style={{
+                width: 52, height: 52, borderRadius: 18, margin: '0 auto 12px',
+                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
+              }}>🤖</div>
+              <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 4 }}>
+                {currentProject?.name ? `Working on: ${currentProject.name}` : 'MobCloud AI'}
+              </p>
+              <p style={{ color: 'var(--muted)', fontSize: 12 }}>
+                Describe what you want to build and I'll generate the complete code
+              </p>
+            </div>
 
-      {/* ── History ── */}
-      <AnimatePresence>
-        {showHistory && promptHistory.length > 0 && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }} className="overflow-hidden flex-shrink-0"
-            style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface2)' }}>
-            <div className="p-2 max-h-36 overflow-auto">
-              <p className="text-xs px-1 mb-1.5 font-medium" style={{ color: 'var(--muted)' }}>Recent prompts</p>
-              {promptHistory.slice(0, 10).map((h, i) => (
-                <button key={i} onClick={() => { setInput(h.text); setShowHistory(false); }}
-                  className="w-full text-left text-xs px-2 py-1.5 rounded-lg mb-0.5 truncate transition-colors"
-                  style={{ color: 'var(--text2)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  {h.text}
+            {/* Category tabs */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 8, overflowX: 'auto' }} className="no-scrollbar">
+              {QUICK_CATEGORIES.map((cat, i) => (
+                <button key={cat.label} onClick={() => setActiveCat(i)} style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+                  cursor: 'pointer', border: 'none', whiteSpace: 'nowrap',
+                  background: activeCat === i ? 'rgba(99,102,241,0.2)' : 'var(--surface2)',
+                  color: activeCat === i ? '#818cf8' : 'var(--muted)',
+                  transition: 'all 0.15s',
+                }}>
+                  <cat.icon size={11} /> {cat.label}
                 </button>
               ))}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
-      {/* ── Messages ── */}
-      <div className="flex-1 overflow-auto px-3 py-4">
-        {messages.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
-              style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.08))' }}>
-              <Bot size={24} style={{ color: '#818cf8' }} />
+            {/* Quick prompts */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {QUICK_CATEGORIES[activeCat].prompts.map((p, i) => (
+                <button key={i} onClick={() => send(p)} style={{
+                  textAlign: 'left', padding: '9px 12px', borderRadius: 10,
+                  fontSize: 12, cursor: 'pointer', lineHeight: 1.5,
+                  background: 'var(--surface2)', border: '1px solid var(--border)',
+                  color: 'var(--text2)', transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)'; e.currentTarget.style.color = 'var(--text)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text2)'; }}>
+                  <span>{p}</span>
+                  <ChevronRight size={12} style={{ flexShrink: 0, opacity: 0.4 }} />
+                </button>
+              ))}
             </div>
-            <p className="font-bold text-base mb-1">MobCloud AI</p>
-            <p className="text-sm mb-1" style={{ color: 'var(--text2)' }}>Full-stack project generator</p>
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>
-              Creates complete projects with proper file structure,<br />
-              database integration, and production-ready code
-            </p>
           </div>
         ) : (
           messages.map((msg, i) =>
             msg.role === 'user'
-              ? <UserMessage key={msg.id || i} msg={msg} />
-              : <AIMessage key={msg.id || i} msg={msg} onSuggestion={send} />
+              ? <UserMsg key={msg.id || i} msg={msg} />
+              : <AIMsg key={msg.id || i} msg={msg} />
           )
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Quick Prompts ── */}
-      <AnimatePresence>
-        {showQuick && messages.length === 0 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <QuickPromptsPanel onSend={send} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* No model warning */}
+      {!selectedModel && (
+        <div style={{ padding: '7px 12px', background: 'rgba(245,158,11,0.08)', borderTop: '1px solid rgba(245,158,11,0.15)' }}>
+          <p style={{ fontSize: 11, color: '#f59e0b', textAlign: 'center' }}>
+            ⚠️ No model connected. Run <code>ollama serve</code> then <code>ollama pull llama3</code>
+          </p>
+        </div>
+      )}
 
-      {/* ── Input ── */}
-      <div className="flex-shrink-0 p-3" style={{ borderTop: '1px solid var(--border)' }}>
-        {/* Image preview */}
-        {imagePreview && (
-          <div className="relative mb-2 inline-block">
-            <img src={imagePreview} alt="Reference" className="h-16 rounded-lg object-cover" />
-            <button onClick={() => { setImageBase64(null); setImagePreview(null); }}
-              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
-              style={{ background: '#f43f5e' }}>
-              <X size={10} className="text-white" />
-            </button>
-          </div>
-        )}
-
-        <div className="rounded-xl overflow-hidden transition-all"
-          style={{
-            border: `1px solid ${isAiThinking ? 'rgba(99,102,241,0.5)' : 'var(--border2)'}`,
-            background: 'var(--surface2)',
-            boxShadow: isAiThinking ? '0 0 16px rgba(99,102,241,0.12)' : 'none'
-          }}>
+      {/* Input */}
+      <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <textarea
             ref={textareaRef}
+            data-chat-input
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKey}
-            placeholder={isAiThinking
-              ? 'AI is building your project...'
-              : 'Describe what you want to build, add a feature, or ask for improvements...'}
-            disabled={isAiThinking}
-            rows={3}
-            className="w-full px-3 pt-3 pb-1 text-sm resize-none outline-none"
-            style={{ background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', lineHeight: 1.6 }}
+            onInput={e => {
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+            }}
+            placeholder={selectedModel ? 'Describe your website... (Enter to send)' : 'Connect Ollama first...'}
+            disabled={!selectedModel}
+            rows={1}
+            style={{
+              flex: 1, resize: 'none', padding: '9px 12px', borderRadius: 10,
+              border: '1px solid var(--border)', background: 'var(--surface2)',
+              color: 'var(--text)', fontSize: 13, fontFamily: 'inherit',
+              outline: 'none', lineHeight: 1.5, maxHeight: 120,
+              transition: 'border-color 0.2s',
+            }}
+            onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'}
           />
-          <div className="flex items-center gap-2 px-3 pb-2.5 pt-1">
-            {/* Left actions */}
-            <div className="flex items-center gap-0.5">
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
-              <button onClick={() => fileInputRef.current?.click()}
-                className="btn-icon tooltip" data-tip="Attach reference image" style={{ width: 28, height: 28 }}>
-                <Image size={13} />
-              </button>
-            </div>
 
-            <span className="flex-1 text-xs" style={{ color: 'var(--muted)' }}>
-              {isAiThinking
-                ? <span style={{ color: '#818cf8' }}>⚡ Writing files...</span>
-                : 'Enter to send · Shift+Enter for newline'}
-            </span>
-
-            {/* Send / Stop */}
-            {isAiThinking ? (
-              <button onClick={stopGeneration}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg"
-                style={{ background: 'rgba(244,63,94,0.12)', border: '1px solid rgba(244,63,94,0.3)', color: '#fb7185' }}>
-                <StopCircle size={12} /> Stop
-              </button>
-            ) : (
-              <button onClick={() => send()}
-                disabled={!input.trim() && !imageBase64}
-                className="flex items-center justify-center rounded-lg transition-all"
-                style={{
-                  width: 32, height: 32,
-                  background: (input.trim() || imageBase64) ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'var(--surface3)',
-                  color: (input.trim() || imageBase64) ? 'white' : 'var(--muted)',
-                  cursor: (input.trim() || imageBase64) ? 'pointer' : 'not-allowed',
-                  boxShadow: (input.trim() || imageBase64) ? '0 2px 8px rgba(99,102,241,0.35)' : 'none',
-                }}>
-                <Send size={14} />
-              </button>
-            )}
-          </div>
+          {isAiThinking ? (
+            <button onClick={stop} style={{
+              width: 38, height: 38, borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: 'rgba(244,63,94,0.15)', color: '#f43f5e', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <StopCircle size={16} />
+            </button>
+          ) : (
+            <button onClick={() => send()} disabled={!input.trim() || !selectedModel} style={{
+              width: 38, height: 38, borderRadius: 10, border: 'none', flexShrink: 0,
+              background: (input.trim() && selectedModel) ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'var(--surface2)',
+              color: (input.trim() && selectedModel) ? '#fff' : 'var(--muted)',
+              cursor: (input.trim() && selectedModel) ? 'pointer' : 'not-allowed',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s',
+            }}>
+              <Send size={15} />
+            </button>
+          )}
         </div>
+        <p style={{ fontSize: 10, color: 'var(--muted)', marginTop: 5, textAlign: 'center' }}>
+          Ctrl+K to focus · Enter to send · Shift+Enter for new line
+        </p>
       </div>
     </div>
   );

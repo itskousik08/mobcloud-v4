@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Sun, Moon, Eye, EyeOff, Zap, Cpu, Settings, Bell,
-  Wifi, WifiOff, ChevronDown, Wrench, RefreshCw, Package } from 'lucide-react';
+import { ArrowLeft, Download, Sun, Moon, Wrench, Cpu, ChevronDown, Monitor, Eye } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { api, streamAI } from '../../utils/api';
 import toast from 'react-hot-toast';
 
 const FIX_ACTIONS = [
-  { id: 'responsive', label: '📱 Make Responsive', desc: 'Fix mobile layout' },
-  { id: 'darkmode', label: '🌙 Add Dark Mode', desc: 'Toggle system' },
-  { id: 'seo', label: '🔍 Add SEO', desc: 'Meta, OG, sitemap' },
-  { id: 'performance', label: '⚡ Optimize', desc: 'Performance boost' },
-  { id: 'accessibility', label: '♿ Accessibility', desc: 'ARIA, keyboard nav' },
+  { id: 'responsive', label: '📱 Make Responsive', prompt: 'Make this project fully mobile-responsive with hamburger menu and proper breakpoints for all screen sizes' },
+  { id: 'darkmode', label: '🌙 Add Dark Mode', prompt: 'Add complete dark/light mode toggle with CSS variables, localStorage persistence, and smooth transitions' },
+  { id: 'seo', label: '🔍 Optimize SEO', prompt: 'Add complete SEO: meta tags, Open Graph, Twitter Cards, JSON-LD, robots.txt, and sitemap.xml' },
+  { id: 'performance', label: '⚡ Boost Performance', prompt: 'Optimize for performance: lazy loading images, font preloading, critical CSS inline, minify, and add caching headers' },
+  { id: 'accessibility', label: '♿ Fix Accessibility', prompt: 'Fix all accessibility issues: ARIA labels, keyboard nav, color contrast ratios, skip links, and focus management' },
+  { id: 'animations', label: '✨ Add Animations', prompt: 'Add smooth professional CSS animations, scroll reveal effects, hover transitions, and micro-interactions throughout' },
 ];
 
 export default function WorkspaceHeader({ projectId, onRefreshTree }) {
@@ -19,8 +19,8 @@ export default function WorkspaceHeader({ projectId, onRefreshTree }) {
   const {
     currentProject, theme, toggleTheme,
     ollamaStatus, models, selectedModel, setSelectedModel,
-    showExplorer, showPreview, showChat, togglePanel,
     addMessage, updateLastMessage, setIsAiThinking, setAiThinkingSteps, addAiAction,
+    setPreviewUrl,
   } = useAppStore();
 
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -29,42 +29,41 @@ export default function WorkspaceHeader({ projectId, onRefreshTree }) {
 
   const statusColor = { connected: '#10b981', disconnected: '#f43f5e', unknown: '#f59e0b' }[ollamaStatus] || '#f59e0b';
 
-  async function runFix(fixId) {
-    if (!selectedModel) { toast.error('Select a model first'); return; }
+  async function runFix(action) {
+    if (!selectedModel) { toast.error('Select an AI model first'); return; }
     setShowFix(false);
-    setFixing(fixId);
-
+    setFixing(action.id);
+    addMessage({ role: 'user', content: action.label });
     addMessage({ role: 'assistant', content: '', streaming: true });
     setIsAiThinking(true);
     setAiThinkingSteps([]);
-
-    const fix = FIX_ACTIONS.find(f => f.id === fixId);
-    toast.loading(`Running: ${fix?.label}...`, { id: 'fix' });
-
+    toast.loading(`Running: ${action.label}...`, { id: 'fix' });
     let filesChanged = [];
 
     streamAI({
       projectId,
-      messages: [{ role: 'user', content: `Apply fix: ${fixId}` }],
+      messages: [{ role: 'user', content: action.prompt }],
       model: selectedModel,
       onFile: async ({ path: fp }) => {
         if (!filesChanged.includes(fp)) filesChanged.push(fp);
         addAiAction({ type: 'fix', path: fp, message: `Fixed: ${fp}` });
-        await onRefreshTree?.();
+        try { await onRefreshTree?.(); } catch {}
       },
-      onChunk: (chunk, full) => {
-        const display = full.replace(/<file path="[^"]*">[\s\S]*?<\/file>/g, '').replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+      onChunk: (_, full) => {
+        const display = full
+          .replace(/<file path="[^"]*">[\s\S]*?<\/file>/g, '')
+          .replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         updateLastMessage({ content: display, streaming: true });
       },
-      onDone: (data) => {
-        updateLastMessage({ streaming: false, filesChanged: data?.filesChanged || filesChanged });
+      onDone: () => {
+        updateLastMessage({ streaming: false, filesChanged });
         setIsAiThinking(false);
         setFixing(null);
         onRefreshTree?.();
-        toast.success(`${fix?.label} applied!`, { id: 'fix' });
+        toast.success(`${action.label} applied!`, { id: 'fix' });
       },
       onError: (err) => {
-        updateLastMessage({ content: `⚠️ Fix failed: ${err.message}`, streaming: false });
+        updateLastMessage({ content: `⚠️ ${err.message}`, streaming: false });
         setIsAiThinking(false);
         setFixing(null);
         toast.error(err.message, { id: 'fix' });
@@ -72,122 +71,125 @@ export default function WorkspaceHeader({ projectId, onRefreshTree }) {
     });
   }
 
-  return (
-    <header className="flex items-center gap-2 px-3 h-11 flex-shrink-0"
-      style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+  function refreshPreview() {
+    setPreviewUrl('');
+    setTimeout(() => setPreviewUrl(`/preview/${projectId}/index.html?t=${Date.now()}`), 100);
+  }
 
-      {/* Back + brand */}
-      <button onClick={() => navigate('/')} className="btn-ghost text-xs py-1 px-2 flex-shrink-0">
-        <ArrowLeft size={13} /><span className="hidden sm:inline ml-1">Home</span>
+  return (
+    <header style={{
+      display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px',
+      height: 44, flexShrink: 0, background: 'var(--surface)',
+      borderBottom: '1px solid var(--border)',
+    }}>
+      {/* Back */}
+      <button onClick={() => navigate('/')} className="btn-ghost" style={{ fontSize: 12, padding: '5px 8px' }}>
+        <ArrowLeft size={13} /> <span style={{ display: window.innerWidth > 500 ? '' : 'none' }}>Home</span>
       </button>
-      <span style={{ color: 'var(--border2)', flexShrink: 0 }}>|</span>
-      <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
-        <div className="w-5 h-5 rounded flex items-center justify-center font-black text-white text-xs flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>M</div>
-        <span className="font-semibold text-sm truncate max-w-[100px] md:max-w-[200px]">
-          {currentProject?.name || '...'}
+
+      <span style={{ color: 'var(--border2)' }}>|</span>
+
+      {/* Brand + project */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: 7, flexShrink: 0,
+          background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 800, color: '#fff',
+        }}>M</div>
+        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+          {currentProject?.name || 'Project'}
         </span>
       </div>
 
-      <div className="flex-1" />
+      <div style={{ flex: 1 }} />
 
-      {/* Panel toggles — desktop */}
-      <div className="hidden md:flex items-center gap-1">
-        {[
-          { key: 'showExplorer', label: 'Files', active: showExplorer },
-          { key: 'showPreview', label: 'Preview', active: showPreview },
-          { key: 'showChat', label: 'Chat', active: showChat },
-        ].map(({ key, label, active }) => (
-          <button key={key} onClick={() => togglePanel(key)}
-            className={`text-xs px-2.5 py-1 rounded-lg transition-all ${active ? 'tag tag-indigo' : 'btn-ghost'}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* AI Fix menu */}
-      <div className="relative hidden md:block">
-        <button onClick={() => setShowFix(v => !v)}
-          className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-all ${fixing ? 'tag tag-yellow animate-pulse' : 'btn-secondary'}`}>
-          <Wrench size={12} />
-          {fixing ? 'Fixing...' : 'AI Fix'}
-          <ChevronDown size={11} />
-        </button>
-        {showFix && (
-          <div className="absolute top-full right-0 mt-1 z-50 w-48 rounded-xl overflow-hidden"
-            style={{ background: 'var(--surface2)', border: '1px solid var(--border2)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)' }}>
-            {FIX_ACTIONS.map(f => (
-              <button key={f.id} onClick={() => runFix(f.id)}
-                className="w-full text-left px-3 py-2.5 text-xs transition-colors flex items-center justify-between"
-                style={{ color: 'var(--text2)' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <span>{f.label}</span>
-                <span className="text-xs" style={{ color: 'var(--muted)' }}>{f.desc}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Ollama status dot */}
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor, boxShadow: `0 0 6px ${statusColor}`, flexShrink: 0 }} title={`Ollama ${ollamaStatus}`} />
 
       {/* Model picker */}
-      <div className="relative hidden md:block">
-        <button onClick={() => setShowModelPicker(v => !v)}
-          className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg btn-ghost">
-          <Cpu size={12} />
-          <span className="max-w-[90px] truncate">{selectedModel || 'No model'}</span>
-          <ChevronDown size={11} />
-        </button>
-        {showModelPicker && models.length > 0 && (
-          <div className="absolute top-full right-0 mt-1 z-50 min-w-[160px] rounded-xl overflow-hidden"
-            style={{ background: 'var(--surface2)', border: '1px solid var(--border2)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)' }}>
-            <div className="px-3 py-2 text-xs font-medium border-b" style={{ color: 'var(--muted)', borderColor: 'var(--border)' }}>
-              Select Model
-            </div>
-            <div className="max-h-48 overflow-auto py-1">
-              {models.map(m => (
-                <button key={m.name} onClick={() => { setSelectedModel(m.name); setShowModelPicker(false); }}
-                  className="w-full text-left px-3 py-2 text-xs transition-colors"
-                  style={{
-                    background: selectedModel === m.name ? 'rgba(99,102,241,0.1)' : 'transparent',
-                    color: selectedModel === m.name ? '#a5b4fc' : 'var(--text2)',
-                  }}
-                  onMouseEnter={e => { if (selectedModel !== m.name) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-                  onMouseLeave={e => { if (selectedModel !== m.name) e.currentTarget.style.background = 'transparent'; }}>
+      {window.innerWidth > 700 && (
+        <div style={{ position: 'relative' }}>
+          <button onClick={() => { setShowModelPicker(v => !v); setShowFix(false); }} className="btn-ghost" style={{ fontSize: 11, padding: '5px 8px', gap: 4 }}>
+            <Cpu size={12} />
+            <span style={{ maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {selectedModel || 'No model'}
+            </span>
+            <ChevronDown size={10} />
+          </button>
+          {showModelPicker && (
+            <div style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 100,
+              minWidth: 180, borderRadius: 10, overflow: 'hidden',
+              background: 'var(--surface2)', border: '1px solid var(--border2)',
+              boxShadow: '0 16px 40px rgba(0,0,0,0.5)',
+            }} onMouseLeave={() => setShowModelPicker(false)}>
+              <div style={{ padding: '8px 12px 6px', fontSize: 11, color: 'var(--muted)', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Ollama Models</div>
+              {models.length === 0 ? (
+                <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--muted)' }}>
+                  Run: <code>ollama pull llama3</code>
+                </div>
+              ) : models.map(m => (
+                <button key={m.name} onClick={() => { setSelectedModel(m.name); setShowModelPicker(false); }} style={{
+                  width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12, border: 'none',
+                  cursor: 'pointer', background: selectedModel === m.name ? 'rgba(99,102,241,0.1)' : 'transparent',
+                  color: selectedModel === m.name ? '#a5b4fc' : 'var(--text2)',
+                }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.background = selectedModel === m.name ? 'rgba(99,102,241,0.1)' : 'transparent'}>
                   {m.name}
-                  {m.size && <span className="ml-2" style={{ color: 'var(--muted)' }}>
-                    {(m.size / 1e9).toFixed(1)}GB
-                  </span>}
                 </button>
               ))}
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
-      {/* Status */}
-      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
-      {/* Notifications */}
-      <div className="relative flex-shrink-0">
-        <button className="btn-icon" title="Notifications">
-          <Bell size={14} />
-        </button>
-        {(notifications?.filter(n => !n.read).length > 0) && (
-          <div className="notif-badge" />
-        )}
-      </div>
+      {/* AI Fix */}
+      {window.innerWidth > 600 && (
+        <div style={{ position: 'relative' }}>
+          <button onClick={() => { setShowFix(v => !v); setShowModelPicker(false); }}
+            className={fixing ? 'btn-ghost' : 'btn-ghost'}
+            style={{ fontSize: 11, padding: '5px 8px', gap: 4, color: fixing ? '#fbbf24' : 'var(--text2)' }}>
+            <Wrench size={12} />
+            {fixing ? 'Running...' : 'AI Fix'}
+            <ChevronDown size={10} />
+          </button>
+          {showFix && (
+            <div style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 100,
+              width: 220, borderRadius: 10, overflow: 'hidden',
+              background: 'var(--surface2)', border: '1px solid var(--border2)',
+              boxShadow: '0 16px 40px rgba(0,0,0,0.5)',
+            }} onMouseLeave={() => setShowFix(false)}>
+              {FIX_ACTIONS.map(a => (
+                <button key={a.id} onClick={() => runFix(a)} style={{
+                  width: '100%', textAlign: 'left', padding: '9px 12px', fontSize: 12,
+                  border: 'none', cursor: 'pointer', background: 'transparent', color: 'var(--text2)',
+                }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-
-      {/* Theme */}
-      <button onClick={toggleTheme} className="btn-icon flex-shrink-0">
-        {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+      {/* Refresh preview */}
+      <button onClick={refreshPreview} className="btn-icon" style={{ width: 28, height: 28 }} title="Refresh Preview">
+        <Monitor size={13} />
       </button>
 
-      {/* Download */}
-      <button onClick={() => window.open(api.downloadProject(projectId), '_blank')}
-        className="btn-primary text-xs py-1.5 px-3 flex-shrink-0">
-        <Download size={12} />
-        <span className="hidden sm:inline">Export</span>
+      {/* Download ZIP */}
+      <button onClick={() => window.open(api.downloadProject(projectId), '_blank')} className="btn-icon" style={{ width: 28, height: 28 }} title="Download ZIP">
+        <Download size={13} />
+      </button>
+
+      {/* Theme toggle */}
+      <button onClick={toggleTheme} className="btn-icon" style={{ width: 28, height: 28 }}>
+        {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
       </button>
     </header>
   );

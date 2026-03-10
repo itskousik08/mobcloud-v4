@@ -1,153 +1,262 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { EditorView, basicSetup } from 'codemirror';
-import { EditorState } from '@codemirror/state';
-import { oneDark } from '@codemirror/theme-one-dark';
-import { html } from '@codemirror/lang-html';
-import { css } from '@codemirror/lang-css';
-import { javascript } from '@codemirror/lang-javascript';
-import { json } from '@codemirror/lang-json';
-import { X, Save, FileText, Loader } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { X, Save, Code2, Loader } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { api } from '../../utils/api';
 import toast from 'react-hot-toast';
 
-function getLang(path) {
-  const ext = path?.split('.').pop()?.toLowerCase();
-  return { html: html(), htm: html(), css: css(), js: javascript(), jsx: javascript({ jsx: true }),
-    ts: javascript({ typescript: true }), tsx: javascript({ jsx: true, typescript: true }), json: json() }[ext] || html();
+const FILE_ICONS = {
+  html: '🌐', htm: '🌐', css: '🎨', scss: '🎨', js: '⚡', jsx: '⚛️',
+  ts: '🔷', tsx: '⚛️', json: '{}', md: '📝', txt: '📄',
+  py: '🐍', php: '🐘', svg: '🖼️', png: '🖼️', sh: '⬢', env: '🔑',
+};
+
+function getFileIcon(filePath) {
+  if (!filePath) return '📄';
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  const name = filePath.split('/').pop()?.toLowerCase();
+  if (name === 'dockerfile') return '🐳';
+  if (name === '.gitignore') return '⬡';
+  return FILE_ICONS[ext] || '📄';
 }
 
-export default function EditorPanel({ projectId }) {
-  const editorRef = useRef(null);
+// ── CodeMirror loader (lazy) ──────────────────
+let cm = null;
+async function getCM() {
+  if (cm) return cm;
+  try {
+    const [
+      { EditorView, basicSetup },
+      { EditorState },
+      { oneDark },
+      { html },
+      { css },
+      { javascript },
+      { json },
+    ] = await Promise.all([
+      import('codemirror'),
+      import('@codemirror/state'),
+      import('@codemirror/theme-one-dark'),
+      import('@codemirror/lang-html'),
+      import('@codemirror/lang-css'),
+      import('@codemirror/lang-javascript'),
+      import('@codemirror/lang-json'),
+    ]);
+    cm = { EditorView, EditorState, basicSetup, oneDark, html, css, javascript, json };
+    return cm;
+  } catch (e) {
+    console.warn('CodeMirror unavailable, using fallback textarea', e);
+    return null;
+  }
+}
+
+function getLang(filePath, cmMod) {
+  if (!filePath || !cmMod) return null;
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  const { html, css, javascript, json } = cmMod;
+  const map = {
+    html: html(), htm: html(),
+    css: css(), scss: css(),
+    js: javascript(), jsx: javascript({ jsx: true }),
+    ts: javascript({ typescript: true }),
+    tsx: javascript({ jsx: true, typescript: true }),
+    json: json(),
+  };
+  return map[ext] || null;
+}
+
+// ── CodeMirror Editor ─────────────────────────
+function CMEditor({ filePath, content, onChange }) {
+  const containerRef = useRef(null);
   const viewRef = useRef(null);
-  const { openFiles, activeFile, closeFile, setActiveFile, updateFileContent, markFileSaved } = useAppStore();
-  const [saving, setSaving] = useState(false);
-  const lastPath = useRef(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!editorRef.current || !activeFile) return;
-    if (viewRef.current && lastPath.current === activeFile.path) return; // same file, don't recreate
-
-    viewRef.current?.destroy();
-    viewRef.current = null;
-    lastPath.current = activeFile.path;
-
-    const state = EditorState.create({
-      doc: activeFile.content || '',
-      extensions: [
-        basicSetup,
-        oneDark,
-        getLang(activeFile.path),
+    let mounted = true;
+    getCM().then(cmMod => {
+      if (!mounted || !containerRef.current || !cmMod) { setReady(false); return; }
+      viewRef.current?.destroy();
+      const { EditorView, EditorState, basicSetup, oneDark } = cmMod;
+      const lang = getLang(filePath, cmMod);
+      const exts = [
+        basicSetup, oneDark,
         EditorView.theme({
           '&': { height: '100%', background: 'var(--surface)' },
-          '.cm-content': { fontFamily: "'JetBrains Mono', monospace", fontSize: '13px', padding: '8px 0' },
+          '.cm-scroller': { fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: '13px', overflow: 'auto' },
+          '.cm-content': { padding: '8px 0', minHeight: '100%' },
           '.cm-focused': { outline: 'none' },
           '.cm-gutters': { background: 'var(--surface2)', borderRight: '1px solid var(--border)', minWidth: 44 },
           '.cm-lineNumbers .cm-gutterElement': { color: 'var(--muted)', fontSize: '12px' },
-          '.cm-activeLineGutter': { background: 'rgba(99,102,241,0.08)' },
+          '.cm-activeLineGutter': { background: 'rgba(99,102,241,0.1)' },
           '.cm-activeLine': { background: 'rgba(99,102,241,0.04)' },
-          '.cm-selectionBackground': { background: 'rgba(99,102,241,0.2) !important' },
           '.cm-cursor': { borderLeftColor: '#818cf8' },
+          '.cm-selectionBackground, ::selection': { background: 'rgba(99,102,241,0.25) !important' },
         }),
         EditorView.updateListener.of(upd => {
-          if (upd.docChanged) updateFileContent(activeFile.path, upd.state.doc.toString());
+          if (upd.docChanged) onChange(upd.state.doc.toString());
         }),
-      ]
+        EditorView.lineWrapping,
+      ];
+      if (lang) exts.push(lang);
+
+      viewRef.current = new EditorView({
+        state: EditorState.create({ doc: content || '', extensions: exts }),
+        parent: containerRef.current,
+      });
+      setReady(true);
     });
+    return () => {
+      mounted = false;
+      viewRef.current?.destroy();
+      viewRef.current = null;
+    };
+  }, [filePath]);
 
-    viewRef.current = new EditorView({ state, parent: editorRef.current });
-    return () => { viewRef.current?.destroy(); viewRef.current = null; lastPath.current = null; };
-  }, [activeFile?.path]);
-
-  // Sync external content changes (AI writes)
+  // Update content externally without recreating editor
   useEffect(() => {
-    if (!viewRef.current || !activeFile) return;
-    const cur = viewRef.current.state.doc.toString();
-    if (cur !== activeFile.content && activeFile.content !== undefined) {
-      viewRef.current.dispatch({ changes: { from: 0, to: cur.length, insert: activeFile.content || '' } });
+    if (!viewRef.current || !ready) return;
+    const current = viewRef.current.state.doc.toString();
+    if (current !== content) {
+      viewRef.current.dispatch({
+        changes: { from: 0, to: current.length, insert: content || '' }
+      });
     }
-  }, [activeFile?.content]);
+  }, [content, ready]);
 
-  const save = useCallback(async () => {
+  return <div ref={containerRef} style={{ height: '100%', overflow: 'hidden' }} />;
+}
+
+// ── Main EditorPanel ──────────────────────────
+export default function EditorPanel({ projectId }) {
+  const { openFiles, activeFile, closeFile, setActiveFile, updateFileContent, markFileSaved } = useAppStore();
+  const [saving, setSaving] = useState(false);
+  const [cmAvailable, setCmAvailable] = useState(true);
+
+  // Check CM availability on mount
+  useEffect(() => {
+    getCM().then(mod => setCmAvailable(!!mod));
+  }, []);
+
+  // Ctrl+S save
+  useEffect(() => {
+    const onKey = async (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (!activeFile || saving) return;
+        setSaving(true);
+        try {
+          await api.writeFile(projectId, activeFile.path, activeFile.content || '');
+          markFileSaved(activeFile.path);
+          toast.success(`Saved ${activeFile.path.split('/').pop()}`, { duration: 1500 });
+        } catch (err) {
+          toast.error('Save failed: ' + err.message);
+        }
+        setSaving(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeFile, saving, projectId]);
+
+  async function saveFile() {
     if (!activeFile || saving) return;
     setSaving(true);
     try {
       await api.writeFile(projectId, activeFile.path, activeFile.content || '');
       markFileSaved(activeFile.path);
-      toast.success(`Saved`, { icon: '💾', duration: 1500 });
-    } catch { toast.error('Save failed'); }
-    finally { setSaving(false); }
-  }, [activeFile, projectId, saving]);
-
-  useEffect(() => {
-    const fn = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } };
-    window.addEventListener('keydown', fn);
-    return () => window.removeEventListener('keydown', fn);
-  }, [save]);
+      toast.success('Saved!', { duration: 1200 });
+    } catch (err) {
+      toast.error('Save failed: ' + err.message);
+    }
+    setSaving(false);
+  }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden" style={{ background: 'var(--surface)' }}>
-      {/* Tabs */}
-      <div className="flex items-center overflow-x-auto flex-shrink-0"
-        style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)', minHeight: 36 }}>
-        {openFiles.map(f => {
-          const isActive = activeFile?.path === f.path;
-          const fname = f.path.split('/').pop();
-          return (
-            <div key={f.path} onClick={() => setActiveFile(f)}
-              className="flex items-center gap-2 px-3 py-1.5 cursor-pointer flex-shrink-0 group text-xs transition-colors"
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--surface)' }}>
+      {/* File tabs */}
+      <div style={{
+        display: 'flex', alignItems: 'center', background: 'var(--surface2)',
+        borderBottom: '1px solid var(--border)', flexShrink: 0, overflowX: 'auto', minHeight: 36,
+      }} className="no-scrollbar">
+        {openFiles.map(file => (
+          <div key={file.path} onClick={() => setActiveFile(file)} style={{
+            display: 'flex', alignItems: 'center', gap: 5, padding: '0 10px', height: 36,
+            cursor: 'pointer', flexShrink: 0, fontSize: 12, whiteSpace: 'nowrap',
+            borderRight: '1px solid var(--border)',
+            background: activeFile?.path === file.path ? 'var(--surface)' : 'transparent',
+            color: activeFile?.path === file.path ? 'var(--text)' : 'var(--muted)',
+            borderBottom: activeFile?.path === file.path ? '2px solid #6366f1' : '2px solid transparent',
+            transition: 'all 0.15s',
+          }}>
+            <span style={{ fontSize: 13 }}>{getFileIcon(file.path)}</span>
+            <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {file.path.split('/').pop()}
+            </span>
+            {file.dirty && <span style={{ color: '#f59e0b', fontSize: 16, lineHeight: 1 }}>•</span>}
+            <button
+              onClick={e => { e.stopPropagation(); closeFile(file.path); }}
               style={{
-                borderBottom: isActive ? '2px solid #6366f1' : '2px solid transparent',
-                borderRight: '1px solid var(--border)',
-                background: isActive ? 'var(--surface)' : 'transparent',
-                color: isActive ? 'var(--text)' : 'var(--muted)',
-                minWidth: 80, maxWidth: 160,
-              }}>
-              <span className="truncate">{fname}</span>
-              {f.modified && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />}
-              <button onClick={e => { e.stopPropagation(); closeFile(f.path); }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 hover:text-white">
-                <X size={11} />
-              </button>
-            </div>
-          );
-        })}
-        {openFiles.length === 0 && (
-          <span className="text-xs px-4 py-2" style={{ color: 'var(--muted)' }}>Open a file to edit</span>
-        )}
-        <div className="flex-1" />
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--muted)', padding: '2px 3px', borderRadius: 3,
+                display: 'flex', alignItems: 'center', marginLeft: 2,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <X size={10} />
+            </button>
+          </div>
+        ))}
+        <div style={{ flex: 1 }} />
         {activeFile && (
-          <button onClick={save} disabled={saving}
-            className="px-3 py-1 text-xs flex items-center gap-1.5 flex-shrink-0 transition-colors"
-            style={{ color: saving ? '#818cf8' : 'var(--muted)' }}>
+          <button onClick={saveFile} disabled={saving} style={{
+            display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px',
+            margin: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+            background: 'rgba(99,102,241,0.15)', color: '#818cf8',
+            border: '1px solid rgba(99,102,241,0.25)', cursor: saving ? 'wait' : 'pointer',
+          }}>
             {saving ? <Loader size={11} className="animate-spin" /> : <Save size={11} />}
-            {saving ? 'Saving...' : 'Save'}
+            Save
           </button>
         )}
       </div>
 
-      {/* Editor */}
-      {activeFile ? (
-        <div ref={editorRef} className="flex-1 overflow-hidden" style={{ minHeight: 0 }} />
-      ) : (
-        <div className="flex-1 flex items-center justify-center flex-col gap-3" style={{ color: 'var(--muted)' }}>
-          <FileText size={36} className="opacity-20" />
-          <div className="text-center">
-            <p className="text-sm font-medium mb-1">No file open</p>
-            <p className="text-xs opacity-70">Click a file in explorer or let AI generate code</p>
+      {/* Editor content */}
+      <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, position: 'relative' }}>
+        {!activeFile ? (
+          <div style={{
+            height: '100%', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 12,
+          }}>
+            <Code2 size={40} style={{ color: 'var(--border2)', opacity: 0.5 }} />
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ color: 'var(--text2)', fontWeight: 600, marginBottom: 4 }}>No file open</p>
+              <p style={{ color: 'var(--muted)', fontSize: 12 }}>
+                Click a file in the explorer, or ask AI to generate code
+              </p>
+            </div>
+            <p style={{ color: 'var(--muted)', fontSize: 11 }}>Ctrl+K → focus chat · Ctrl+S → save</p>
           </div>
-        </div>
-      )}
-
-      {/* Status bar */}
-      <div className="flex items-center justify-between px-3 py-0.5 text-xs flex-shrink-0"
-        style={{ background: 'var(--surface2)', borderTop: '1px solid var(--border)', color: 'var(--muted)' }}>
-        <span>{activeFile?.path || 'No file'}</span>
-        <div className="flex items-center gap-3">
-          {activeFile && <span>{activeFile.path.split('.').pop()?.toUpperCase()}</span>}
-          <span>UTF-8</span>
-          <span>Spaces: 2</span>
-        </div>
+        ) : cmAvailable ? (
+          <CMEditor
+            key={activeFile.path}
+            filePath={activeFile.path}
+            content={activeFile.content || ''}
+            onChange={(newContent) => updateFileContent(activeFile.path, newContent)}
+          />
+        ) : (
+          /* Fallback: plain textarea */
+          <textarea
+            value={activeFile.content || ''}
+            onChange={e => updateFileContent(activeFile.path, e.target.value)}
+            spellCheck={false}
+            style={{
+              width: '100%', height: '100%', padding: '12px 16px', border: 'none',
+              resize: 'none', outline: 'none', background: 'var(--surface)',
+              color: 'var(--text)', fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 13, lineHeight: 1.7, tabSize: 2,
+            }}
+          />
+        )}
       </div>
     </div>
   );

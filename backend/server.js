@@ -42,6 +42,7 @@ app.use('/api/database', require('./routes/database'));
 app.use('/api/security', require('./routes/security'));
 app.use('/api/cicd', require('./routes/cicd'));
 app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/email', require('./routes/email'));
 
 // Serve workspace files statically for preview
 app.use('/preview', express.static(WORKSPACE_DIR));
@@ -71,7 +72,7 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`\n🚀 Mobclowd Backend running on http://localhost:${PORT}`);
+  console.log(`\n🚀 MobCloud Backend running on http://localhost:${PORT}`);
   console.log(`📁 Workspace: ${WORKSPACE_DIR}`);
   console.log(`🤖 Ollama API: ${process.env.OLLAMA_URL || 'http://localhost:11434'}\n`);
 });

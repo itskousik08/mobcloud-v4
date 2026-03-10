@@ -202,7 +202,7 @@ export default function FileExplorer({ projectId, onFileOpen, onRefresh }) {
     e.preventDefault();
     if (!newDirName.trim()) return;
     try {
-      await api.mkdir(projectId, newDirName.trim());
+      await api.createFolder(projectId, newDirName.trim());
       await onRefresh();
       setNewDirName(''); setShowNewDir(false);
       toast.success(`Folder created`);
